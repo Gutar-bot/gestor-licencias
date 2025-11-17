@@ -185,8 +185,9 @@ app.post("/licenses/:id/status", (req, res) => {
 
 // ================= SERVIDOR =================
 
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`🔥 Servidor REST funcionando en http://localhost:${PORT}`);
+  console.log(`🔥 Servidor ONLINE en puerto ${PORT}`);
 });
+
