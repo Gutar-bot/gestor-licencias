@@ -40,6 +40,16 @@ async function init() {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS license_logs (
+      id SERIAL PRIMARY KEY,
+      license_id INTEGER REFERENCES licenses(id) ON DELETE CASCADE,
+      machine_id TEXT,
+      event TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
   console.log("✅ Tablas verificadas/creadas en PostgreSQL");
 }
 

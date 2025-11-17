@@ -3,9 +3,10 @@ const API_BASE = "";
 let authToken = null;
 let clientsCache = [];
 let licensesCache = [];
+let statsCache = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Login
+  // Login automático si hay token guardado
   const storedToken = localStorage.getItem("authToken");
   if (storedToken) {
     authToken = storedToken;
@@ -13,18 +14,25 @@ document.addEventListener("DOMContentLoaded", () => {
     initAppEvents();
     loadClients();
     loadLicenses();
+    loadStats();
   } else {
     showLogin();
   }
 
   const loginForm = document.getElementById("loginForm");
-  loginForm.addEventListener("submit", handleLogin);
+  if (loginForm) {
+    loginForm.addEventListener("submit", handleLogin);
+  }
 
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    authToken = null;
-    localStorage.removeItem("authToken");
-    showLogin();
-  });
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      authToken = null;
+      localStorage.removeItem("authToken");
+      showLogin();
+      showAlert("Sesión cerrada", "info");
+    });
+  }
 });
 
 function showLogin() {
@@ -62,6 +70,7 @@ async function handleLogin(e) {
     initAppEvents();
     loadClients();
     loadLicenses();
+    loadStats();
     showAlert("Sesión iniciada", "success");
   } catch (err) {
     console.error(err);
@@ -86,43 +95,61 @@ function initAppEvents() {
   const clientForm = document.getElementById("clientForm");
   const licenseForm = document.getElementById("licenseForm");
 
-  document
-    .getElementById("reloadClients")
-    .addEventListener("click", loadClients);
-  document
-    .getElementById("reloadLicenses")
-    .addEventListener("click", loadLicenses);
-  document
-    .getElementById("applyFilters")
-    .addEventListener("click", loadLicenses);
-  document.getElementById("clearFilters").addEventListener("click", () => {
-    document.getElementById("filterStatus").value = "";
-    document.getElementById("filterClient").value = "";
-    loadLicenses();
-  });
+  const reloadClientsBtn = document.getElementById("reloadClients");
+  if (reloadClientsBtn) reloadClientsBtn.addEventListener("click", loadClients);
 
-  clientForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await createClient();
-  });
+  const reloadLicensesBtn = document.getElementById("reloadLicenses");
+  if (reloadLicensesBtn) reloadLicensesBtn.addEventListener("click", loadLicenses);
 
-  licenseForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await createLicense();
-  });
+  const applyFiltersBtn = document.getElementById("applyFilters");
+  if (applyFiltersBtn) applyFiltersBtn.addEventListener("click", loadLicenses);
 
-  // Exportar CSV
-  document
-    .getElementById("exportClients")
-    .addEventListener("click", () => exportClientsCsv());
-  document
-    .getElementById("exportLicenses")
-    .addEventListener("click", () => exportLicensesCsv());
+  const clearFiltersBtn = document.getElementById("clearFilters");
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener("click", () => {
+      const fs = document.getElementById("filterStatus");
+      const fc = document.getElementById("filterClient");
+      if (fs) fs.value = "";
+      if (fc) fc.value = "";
+      loadLicenses();
+    });
+  }
+
+  if (clientForm) {
+    clientForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await createClient();
+    });
+  }
+
+  if (licenseForm) {
+    licenseForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await createLicense();
+    });
+  }
+
+  const exportClientsBtn = document.getElementById("exportClients");
+  if (exportClientsBtn) {
+    exportClientsBtn.addEventListener("click", () => exportClientsCsv());
+  }
+
+  const exportLicensesBtn = document.getElementById("exportLicenses");
+  if (exportLicensesBtn) {
+    exportLicensesBtn.addEventListener("click", () => exportLicensesCsv());
+  }
+
+  const reloadStatsBtn = document.getElementById("reloadStats");
+  if (reloadStatsBtn) {
+    reloadStatsBtn.addEventListener("click", loadStats);
+  }
 }
 
 // ---------- ALERTAS ----------
 function showAlert(message, type = "success") {
   const container = document.getElementById("alertContainer");
+  if (!container) return;
+
   const wrapper = document.createElement("div");
   wrapper.className = `alert alert-${type} alert-dismissible fade show mb-2`;
   wrapper.role = "alert";
@@ -154,6 +181,7 @@ async function loadClients() {
 
 function renderClientsTable(clients) {
   const tbody = document.querySelector("#clientsTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
   clients.forEach((c) => {
     const tr = document.createElement("tr");
@@ -170,6 +198,7 @@ function renderClientsTable(clients) {
 
 function fillClientFilter(clients) {
   const select = document.getElementById("filterClient");
+  if (!select) return;
   const previous = select.value;
   select.innerHTML = '<option value="">Todos</option>';
   clients.forEach((c) => {
@@ -214,8 +243,11 @@ async function createClient() {
 
 // ---------- LICENCIAS ----------
 async function loadLicenses() {
-  const status = document.getElementById("filterStatus").value;
-  const client_id = document.getElementById("filterClient").value;
+  const statusEl = document.getElementById("filterStatus");
+  const clientEl = document.getElementById("filterClient");
+
+  const status = statusEl ? statusEl.value : "";
+  const client_id = clientEl ? clientEl.value : "";
 
   const params = new URLSearchParams();
   if (status) params.append("status", status);
@@ -237,6 +269,7 @@ async function loadLicenses() {
 
 function renderLicensesTable(licenses) {
   const tbody = document.querySelector("#licensesTable tbody");
+  if (!tbody) return;
   tbody.innerHTML = "";
 
   licenses.forEach((l) => {
@@ -368,6 +401,53 @@ async function changeLicenseStatus(licenseId, newStatus) {
   } catch (err) {
     console.error(err);
     showAlert(`No se pudo cambiar el estado: ${err.message}`, "danger");
+  }
+}
+
+// ---------- ESTADÍSTICAS ----------
+async function loadStats() {
+  try {
+    const res = await apiFetch(`${API_BASE}/stats`);
+    if (!res.ok) throw new Error("Error HTTP " + res.status);
+    const data = await res.json();
+    statsCache = data;
+    renderStats(data);
+  } catch (err) {
+    console.error(err);
+    showAlert("Error al cargar estadísticas", "danger");
+  }
+}
+
+function renderStats(data) {
+  const clientsEl = document.getElementById("statsClientsTotal");
+  const licensesEl = document.getElementById("statsLicensesTotal");
+  const byStatusEl = document.getElementById("statsLicensesByStatus");
+  const salesTBody = document
+    .getElementById("statsSalesTable")
+    ?.querySelector("tbody");
+
+  if (clientsEl) clientsEl.textContent = data.clients_total ?? "-";
+  if (licensesEl) licensesEl.textContent = data.licenses_total ?? "-";
+
+  if (byStatusEl) {
+    byStatusEl.innerHTML = "";
+    (data.licenses_by_status || []).forEach((row) => {
+      const li = document.createElement("li");
+      li.textContent = `${row.status}: ${row.total}`;
+      byStatusEl.appendChild(li);
+    });
+  }
+
+  if (salesTBody) {
+    salesTBody.innerHTML = "";
+    (data.sales_by_month || []).forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.month}</td>
+        <td>${row.total}</td>
+      `;
+      salesTBody.appendChild(tr);
+    });
   }
 }
 
