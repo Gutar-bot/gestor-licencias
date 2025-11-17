@@ -1,33 +1,52 @@
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
+// db.js - versión PostgreSQL
+const { Pool } = require("pg");
 
-const db = new sqlite3.Database(path.join(__dirname, "database.sqlite"));
+if (!process.env.DATABASE_URL) {
+  console.error("⚠️ Falta la variable de entorno DATABASE_URL");
+}
 
-db.serialize(() => {
-  db.run(`
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // necesario en muchos entornos de Render
+  },
+});
+
+// Crear tablas si no existen
+async function init() {
+  console.log("🟢 Conectando a PostgreSQL...");
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS clients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT,
       phone TEXT,
       notes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
-  db.run(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS licenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       token TEXT NOT NULL UNIQUE,
-      client_id INTEGER,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
       status TEXT NOT NULL,
-      sold_at DATETIME,
-      expires_at DATETIME,
-      last_status_change DATETIME DEFAULT CURRENT_TIMESTAMP,
-      notes TEXT,
-      FOREIGN KEY (client_id) REFERENCES clients(id)
-    )
+      sold_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      last_status_change TIMESTAMPTZ DEFAULT NOW(),
+      notes TEXT
+    );
   `);
+
+  console.log("✅ Tablas verificadas/creadas en PostgreSQL");
+}
+
+init().catch((err) => {
+  console.error("❌ Error inicializando base de datos:", err);
 });
 
-module.exports = db;
+module.exports = {
+  query: (text, params) => pool.query(text, params),
+};
